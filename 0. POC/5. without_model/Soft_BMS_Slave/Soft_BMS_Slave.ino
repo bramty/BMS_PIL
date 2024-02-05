@@ -83,6 +83,9 @@ typedef union {
 FLOATUNION_t volt_k, temp_k, bal_k;
 bool readStatus;
 
+/* w.o. model */
+int testcase = 0;
+
 void setup () 
 {
   // Initialize PINs
@@ -130,10 +133,54 @@ void loop ()
     } 
   }
 
-  /* PIL - ON */
+  /* PIL - OFF */
   // Reading voltage and temperature from model
-  if (Serial.available() > 0){
-    readStatus = readFromMatlab(&volt_k, &temp_k);
+  // if (Serial.available() > 0){
+  //   readStatus = readFromMatlab(&volt_k, &temp_k);
+  // }
+
+  /* w.o. model */
+  switch(testcase){
+    case 1:
+      if(ID==0x01){
+        volt_k.fval = 3.5*1023/5.0;
+        temp_k.fval = 25.0;
+      }else if(ID==0x02){
+        volt_k.fval = 3.5*1023/5.0;
+        temp_k.fval = 25.0;
+      }else if(ID==0x03){
+        volt_k.fval = 3.5*1023/5.0;
+        temp_k.fval = 25.0;
+      }
+      testcase = 2;
+      break;
+    case 2:
+      if(ID==0x01){
+        volt_k.fval = 3.4*1023/5.0;
+        temp_k.fval = 23.0;
+      }else if(ID==0x02){
+        volt_k.fval = 3.5*1023/5.0;
+        temp_k.fval = 25.0;
+      }else if(ID==0x03){
+        volt_k.fval = 3.6*1023/5.0;
+        temp_k.fval = 28.0;
+      }
+      testcase = 3;
+      break;
+
+    case 3:
+      if(ID==0x01){
+        volt_k.fval = 3.6*1023/5.0;
+        temp_k.fval = 23.0;
+      }else if(ID==0x02){
+        volt_k.fval = 3.5*1023/5.0;
+        temp_k.fval = 25.0;
+      }else if(ID==0x03){
+        volt_k.fval = 3.4*1023/5.0;
+        temp_k.fval = 28.0;
+      }
+      testcase = 1;
+      break;
   }
 
   /* Original BMS */
@@ -182,13 +229,13 @@ void loop ()
   //   digitalWrite(Bal_Pin, LOW);
   // }
 
-  /* PIL - ON */
+  /* PIL - OFF */
   // Sending battery balance command to model
-  if(readStatus){
-    bal_k.bytes[0] = Cell_Bal;
-    writeToMatlab(bal_k);
-    readStatus = false;
-  }
+  // if(readStatus){
+  //   bal_k.bytes[0] = Cell_Bal;
+  //   writeToMatlab(bal_k);
+  //   readStatus = false;
+  // }
   
 }
 
