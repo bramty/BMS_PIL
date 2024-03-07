@@ -2,7 +2,7 @@
 // BMS Master-Slave PIL
 // Slave Module
 //
-// v3, 04.03.2024
+// v3, 05.02.2024
 // + Arduino Nano 
 // + CAN Shield
 // + Simulink Model via Serial
@@ -37,7 +37,7 @@ MCP_CAN CAN(CAN_CS_Pin);
 
 #define MasterID 0x100      // ID Master
 
-#define SlaveID  0x103      // ID Slave -> IT MUST BE MODIFIED FOR EACH SLAVE MODULE!!!
+#define SlaveID  0x101      // ID Slave -> IT MUST BE MODIFIED FOR EACH SLAVE MODULE!!!
 
 uint8_t ID = (uint8_t)(SlaveID - 0x100);
 
@@ -60,7 +60,7 @@ static uint32_t CAN_LastTime;
 // int Temp_NoSamples = CAN_Timeout / Temp_Timeout;
 // int Volt_NoSamples = CAN_Timeout / Volt_Timeout;
 
-static int CAN_Timeout = 500;      // timeout for transmiting CAN frame
+static int CAN_Timeout = 1000;      // timeout for transmiting CAN frame
 
 int Cell_Bal = 0x00;   // Balancing State
 int Cell_Volt;      // Cell Voltage
@@ -132,10 +132,9 @@ void loop ()
 
   /* PIL - ON */
   // Reading voltage and temperature from model
-  // if (Serial.available() > 0){
-  //   readStatus = readFromMatlab(&volt_k, &temp_k);
-  // }
-  readStatus = readFromMatlab(&volt_k, &temp_k);
+  if (Serial.available() > 0){
+    readStatus = readFromMatlab(&volt_k, &temp_k);
+  }
 
   /* Original BMS */
   // // Reading voltage
@@ -162,7 +161,7 @@ void loop ()
     TxBuf[0] = Cell_Bal;
 
     // Putting voltage reading to Tx buffer
-    Cell_Volt = (int)(volt_k.fval * 1000.0);
+    Cell_Volt = (int)(volt_k.fval * 5.0 * 1000.0 / 1023.0);
     TxBuf[1] = (Cell_Volt >> 8 ) & 0xFF;
     TxBuf[2] = Cell_Volt & 0xFF;
 
@@ -184,15 +183,9 @@ void loop ()
   // }
 
   /* PIL - ON */
-  // Change the data type to be sent to PIL
-  if ( Cell_Bal == 0x01 ) {
-    bal_k.fval = 1.0;
-  } else if ( Cell_Bal == 0x00 ) {
-    bal_k.fval = 0.0;
-  }
-
   // Sending battery balance command to model
   if(readStatus){
+    bal_k.bytes[0] = Cell_Bal;
     writeToMatlab(bal_k);
     readStatus = false;
   }
@@ -212,7 +205,7 @@ bool readFromMatlab( FLOATUNION_t* f1, FLOATUNION_t* f2 ){
   for( int i=4;i<8;i++){
     f2->bytes[i-4]=buff[i];
   }
-  state = rlen;
+  state = true;
 
   return state;
 }

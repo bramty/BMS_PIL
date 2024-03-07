@@ -2,34 +2,11 @@
 // BMS Master-Slave PIL
 // Master Module
 //
-// v4, 05.02.2024
+// v4, 04.03.2024
 // + Arduino Nano 
 // + CAN Shield
 //
 //**************************************************** 
-
-// These define's must be placed at the beginning before #include "TimerInterrupt.h"
-// _TIMERINTERRUPT_LOGLEVEL_ from 0 to 4
-// Don't define _TIMERINTERRUPT_LOGLEVEL_ > 0. Only for special ISR debugging only. Can hang the system.
-#define TIMER_INTERRUPT_DEBUG         0
-#define _TIMERINTERRUPT_LOGLEVEL_     0
-
-#define USE_TIMER_1     true
-
-#if ( defined(__AVR_ATmega644__) || defined(__AVR_ATmega644A__) || defined(__AVR_ATmega644P__) || defined(__AVR_ATmega644PA__)  || \
-        defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_NANO) || defined(ARDUINO_AVR_MINI) ||    defined(ARDUINO_AVR_ETHERNET) || \
-        defined(ARDUINO_AVR_FIO) || defined(ARDUINO_AVR_BT)   || defined(ARDUINO_AVR_LILYPAD) || defined(ARDUINO_AVR_PRO)      || \
-        defined(ARDUINO_AVR_NG) || defined(ARDUINO_AVR_UNO_WIFI_DEV_ED) || defined(ARDUINO_AVR_DUEMILANOVE) || defined(ARDUINO_AVR_FEATHER328P) || \
-        defined(ARDUINO_AVR_METRO) || defined(ARDUINO_AVR_PROTRINKET5) || defined(ARDUINO_AVR_PROTRINKET3) || defined(ARDUINO_AVR_PROTRINKET5FTDI) || \
-        defined(ARDUINO_AVR_PROTRINKET3FTDI) )
-  #define USE_TIMER_2     true
-  #warning Using Timer1, Timer2
-#else          
-  #define USE_TIMER_3     true
-  #warning Using Timer1, Timer3
-#endif
-
-#include "TimerInterrupt.h"
 
 #include <SPI.h>
 #include <mcp_can.h>
@@ -74,7 +51,7 @@ byte len = 0;
 #define Red_LED_Pin 9
 
 unsigned long int i = 0; 
-int CAN_Timeout = 100;      // timeout for transmitting of CAN frames
+int CAN_Timeout = 1000;      // timeout for transmitting of CAN frames
 
 #define SlaveStopBalance  0x00
 #define SlaveStartBalance 0x01
@@ -100,13 +77,6 @@ static uint32_t Current_Time;
 static uint32_t Last_Time; 
 
 bool initialized;
-
-#define DAQ_INTERVAL_MS    1000  // Time period for sending data to DAQ
-
-void DAQ_Handler(void){
-  // Send balancing states, cell voltages, cell temperatures over serial
-  sendInfoSerial(Cell_Bal, Cell_Volt, Cell_Temp);
-}
 
 void setup (){
   // Initialize PINs
@@ -136,15 +106,6 @@ void setup (){
   }
 
   Last_Time = millis();
-
-  // Initialize timer
-  ITimer1.init();
-
-  // Attach timer to interrupt
-  if (ITimer1.attachInterruptInterval(DAQ_INTERVAL_MS, DAQ_Handler)){
-    Serial.print(F("Starting  ITimer1 OK, millis() = ")); Serial.println(millis());
-  } else
-    Serial.println(F("Can't set ITimer1. Select another freq. or timer"));
 
   // BMS Master not yet receiving all data from BMS Slave
   initialized = false;
@@ -226,13 +187,14 @@ void loop () {
 
   // sending balancing state update if there's any
   if (Current_Time - Last_Time > CAN_Timeout) {
+    sendInfoSerial(Cell_Bal, Cell_Volt, Cell_Temp, StateChange_Cell_Bal);
     for(j=0; j<N_BATT; j++){
       if( StateChange_Cell_Bal[j] ){
         TxBuf[0] = Slave_ID[j];
         TxBuf[1] = buff_Cell_Bal[j];
         CAN.sendMsgBuf(MasterID, 0, 8, TxBuf);
         StateChange_Cell_Bal[j] = false;
-        Last_Time = Current_Time;
+        Last_Time = Current_Time;          
         delay(100);
       }
     }
@@ -254,15 +216,14 @@ bool checkInitialized(int voltages[N_BATT], int temp[N_BATT]){
   return initialized;
 }
 
-void sendInfoSerial(int balState[N_BATT], int voltages[N_BATT], int temp[N_BATT]){
-
+void sendInfoSerial(int balState[N_BATT], int voltages[N_BATT], int temp[N_BATT], bool stateChange[N_BATT]){
   Serial.println("BMS");
 
   Serial.print("Bal:"); 
   for (j=0; j<=N_BATT-1; j++) 
   {
     Serial.print(balState[j]);
-    if (j != N_BATT){
+    if (j != N_BATT-1){
       Serial.print(",");
     }
   }
@@ -272,7 +233,7 @@ void sendInfoSerial(int balState[N_BATT], int voltages[N_BATT], int temp[N_BATT]
   for (j=0; j<=N_BATT-1; j++) 
   {
     Serial.print(voltages[j]);
-    if (j != N_BATT){
+    if (j != N_BATT-1){
       Serial.print(",");
     }
   }
@@ -282,11 +243,21 @@ void sendInfoSerial(int balState[N_BATT], int voltages[N_BATT], int temp[N_BATT]
   for (j=0; j<=N_BATT-1; j++) 
   {
     Serial.print(temp[j]);
-    if (j != N_BATT){
+    if (j != N_BATT-1){
       Serial.print(",");
     }
   }
-  Serial.println();     
+  Serial.println();    
+
+  Serial.print("StateChange:"); 
+  for (j=0; j<=N_BATT-1; j++) 
+  {
+    Serial.print(stateChange[j]);
+    if (j != N_BATT-1){
+      Serial.print(",");
+    }
+  }
+  Serial.println();   
 }
 
 void checkBalancingState(int balState[N_BATT], int voltages[N_BATT]){
@@ -294,14 +265,20 @@ void checkBalancingState(int balState[N_BATT], int voltages[N_BATT]){
 
   for(j=0; j<N_BATT; j++){
     if( voltages[j]-mean_voltage > balance_diff ){
-      if( (balState[j]==SlaveStopBalance) && (StateChange_Cell_Bal[j]==false) ){
+      if(balState[j]==SlaveStopBalance){
         buff_Cell_Bal[j] = SlaveStartBalance; // State to be updated 0x00->0x01
         StateChange_Cell_Bal[j] = true; // Balancing state needs to be updated
+      } else if ((balState[j]==SlaveStartBalance) && (StateChange_Cell_Bal[j]==true)){
+        buff_Cell_Bal[j] = SlaveStartBalance; // State not to be updated
+        StateChange_Cell_Bal[j] = false; // Balancing state no need to be updated 
       }
     } else {
-      if( (balState[j]==SlaveStartBalance) && (StateChange_Cell_Bal[j]==false) ){
+      if(balState[j]==SlaveStartBalance){
         buff_Cell_Bal[j] = SlaveStopBalance; // State to be updated 0x01->0x00
         StateChange_Cell_Bal[j] = true; // Balancing state needs to be updated
+      } else if((balState[j]==SlaveStopBalance) && (StateChange_Cell_Bal[j]==true)){
+        buff_Cell_Bal[j] = SlaveStopBalance; // State not to be updated
+        StateChange_Cell_Bal[j] = false; // Balancing state no need to be updated        
       }
     }
   }

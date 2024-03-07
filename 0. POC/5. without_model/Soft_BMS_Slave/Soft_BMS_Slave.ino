@@ -2,7 +2,7 @@
 // BMS Master-Slave PIL
 // Slave Module
 //
-// v3, 05.02.2024
+// v3, 04.03.2024
 // + Arduino Nano 
 // + CAN Shield
 // + Simulink Model via Serial
@@ -60,7 +60,7 @@ static uint32_t CAN_LastTime;
 // int Temp_NoSamples = CAN_Timeout / Temp_Timeout;
 // int Volt_NoSamples = CAN_Timeout / Volt_Timeout;
 
-static int CAN_Timeout = 1000;      // timeout for transmiting CAN frame
+static int CAN_Timeout = 500;      // timeout for transmiting CAN frame
 
 int Cell_Bal = 0x00;   // Balancing State
 int Cell_Volt;      // Cell Voltage
@@ -84,7 +84,7 @@ FLOATUNION_t volt_k, temp_k, bal_k;
 bool readStatus;
 
 /* w.o. model */
-int testcase = 0;
+int testcase = 1;
 
 void setup () 
 {
